@@ -15,7 +15,7 @@ my $hooks = Plugins::addHooks(
     ['AI_pre', \&on_ai],
     ['AI_pre/manual', \&on_ai]
 );
-my $delay = 2;
+my $delay = .5;
 
 sub on_unload {
     Plugins::delHooks($hooks);
@@ -57,6 +57,7 @@ sub on_ai {
             # 4009 High Priest
             foreach (@playersID) {
                 my $player = $players{$_};
+                # debugger($player->{jobID});
                 my $skill = new Skill(auto => "ALL_RESURRECTION", level => "4");
                 $taskManager->add(Task::UseSkill->new(
                     skill => $skill,
@@ -66,21 +67,25 @@ sub on_ai {
                     actorList => $playersList
                 )) if($player->{dead});
             }
+            # foreach (@monstersID) {
+            #     my $monster = $monsters{$_};
+            #     # debugger($monster);
+            # }
             my $onBragi = 0;
             foreach (@spellsID) {
                 my $spell = $spells{$_};
-                $onBragi = 1 if(getSpellName($spell->{type}) eq "Poem of Bragi"
+                $onBragi = 1 if(getSpellName($spell->{type}) eq "Magic Strings"
                                 && $char->{pos_to}{x} eq $spell->{pos}{x}
                                 && $char->{pos_to}{y} eq $spell->{pos}{y});
             }
-            my $isActive = ($char->{statuses}{"EFST_POEMBRAGI"}) ? 1 : 0
+            my $isActive = ($char->{statuses}{"EFST_POEMBRAGI"}) ? 1 : 0;
             $char->setStatus("EFST_POEMBRAGI", $onBragi) if(($isActive eq 1 && $onBragi eq 0) ||
                                                             ($isActive eq 0 && $onBragi eq 1));
         }
         # Eske specific MVPs
         if($char->{jobID} eq 4049) {
             # 4049: Soul Linker
-            @mobs = (1832, 1873, 1100);
+            @mobs = (1832, 1873, 1874,1751, 1957, 1931, 1956);
             foreach (@monstersID) {
                 my $monster = $monsters{$_};
                 if(grep {$_ eq $monster->{type}} @mobs) {
