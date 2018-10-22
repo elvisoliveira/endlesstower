@@ -13,9 +13,21 @@ Plugins::register('endlesstower', '', \&on_unload, \&on_reload);
 
 my $hooks = Plugins::addHooks(
     ['AI_pre', \&on_ai],
-    ['AI_pre/manual', \&on_ai]
+    ['AI_pre/manual', \&on_ai],
+    ['Network::stateChanged',\&stateChanged]
 );
 my $delay = .5;
+my $bus_message_received;
+
+my %spp = ();
+
+if ($::net) {
+    if ($::net->getState() > 1) {
+        $bus_message_received = $bus->onMessageReceived->add(undef, \&bus_message_received);
+        Plugins::delHook($networkHook);
+        undef $networkHook;
+    }
+}
 
 sub on_unload {
     Plugins::delHooks($hooks);
@@ -100,11 +112,57 @@ sub on_ai {
                 }
             }
         }
+        # SP Controller
+        # @TODO: if not Scholar: Send SP percentage to Scholar via BUS
+        if($char->{jobID} ne 4017) {
+            return if (!main::timeOut($time, 1)); # 1 seconds delay
+            my $ssp = int($char->{'sp'}/$char->{'sp_max'} * 100);
+            $bus->send('endlesstower', $char->{accountID}) if($ssp < 10);
+        }
     }
     else {
         # @TODO: When moving, cancel AI and all tasks (but move, obviously)
     }
     $time = time;
+}
+# @TODO: if Scholar: check if char is nearby and Soul Exale if SP is below 10% and self SP is 100%
+sub bus_message_received {
+    my (undef, undef, $msg) = @_;
+    if ($msg->{messageID} eq 'endlesstower' && $char) {
+        my $ssp = int($char->{'sp'}/$char->{'sp_max'} * 100);
+        my $giveSP = Actor::get($msg->{args});
+        if($giveSP
+           && $ssp > 99
+           && $char->{jobID} eq 4017
+           && distance(calcPosition($char), calcPosition($giveSP)) <= 5) {
+            my $skill = new Skill(auto => PF_SOULCHANGE, level => 1);
+            my $identify = $giveSP->{nameID} . $skill->{idn};
+            unless ($taskManager->countTasksByName($identify)) {
+                $taskManager->add(Task::UseSkill->new(
+                    name => $identify,
+                    skill => $skill,
+                    actor => $skill->getOwner,
+                    target => $giveSP,
+                    actorList => $playersList,
+                    priority => Task::HIGH_PRIORITY
+                ));
+            }
+        }
+    }
+}
+sub stateChanged {
+    return if ($::net->getState() == 1);
+    if (!$bus) {
+        my @message = (
+            "You MUST start BUS server and configure each bot to use it in order to use this plugin.",
+            "Open and edit line bus 0 to bus 1 inside control/sys.txt"
+        );
+        die("\n$message[0] $message[1]\n", 3, 0);
+    }
+    if (!$bus_message_received) {
+        $bus_message_received = $bus->onMessageReceived->add(undef, \&bus_message_received);
+        Plugins::delHook('Network::stateChanged', $hooks);
+    }
 }
 # debugger($monster->statusesString);
 # eval use Data::Dumper; message Dumper($char->{statuses});
