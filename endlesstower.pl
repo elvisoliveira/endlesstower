@@ -19,8 +19,6 @@ my $hooks = Plugins::addHooks(
 my $delay = .5;
 my $bus_message_received;
 
-my %spp = ();
-
 if ($::net) {
     if ($::net->getState() > 1) {
         $bus_message_received = $bus->onMessageReceived->add(undef, \&bus_message_received);
@@ -113,10 +111,9 @@ sub on_ai {
             }
         }
         # SP Controller
-        # @TODO: if not Scholar: Send SP percentage to Scholar via BUS
         if($char->{jobID} ne 4017) {
             return if (!main::timeOut($time, 1)); # 1 seconds delay
-            my $ssp = int($char->{'sp'}/$char->{'sp_max'} * 100);
+            my $ssp = int($char->{'sp'} / $char->{'sp_max'} * 100);
             $bus->send('endlesstower', $char->{accountID}) if($ssp < 10);
         }
     }
@@ -125,11 +122,10 @@ sub on_ai {
     }
     $time = time;
 }
-# @TODO: if Scholar: check if char is nearby and Soul Exale if SP is below 10% and self SP is 100%
 sub bus_message_received {
     my (undef, undef, $msg) = @_;
     if ($msg->{messageID} eq 'endlesstower' && $char) {
-        my $ssp = int($char->{'sp'}/$char->{'sp_max'} * 100);
+        my $ssp = int($char->{'sp'} / $char->{'sp_max'} * 100);
         my $giveSP = Actor::get($msg->{args});
         if($giveSP
            && $ssp > 99
