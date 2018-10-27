@@ -13,8 +13,10 @@ Plugins::register('endlesstower', '', \&on_unload, \&on_reload);
 
 my $hooks = Plugins::addHooks(
     ['AI_pre', \&on_ai],
-    ['AI_pre/manual', \&on_ai],
-    ['Network::stateChanged',\&stateChanged]
+    ['AI_pre/manual', \&on_ai]
+);
+my $hooksNetwork = Plugins::addHook(
+    'Network::stateChanged', \&stateChanged
 );
 my $delay = .5;
 my $bus_message_received;
@@ -22,8 +24,7 @@ my $bus_message_received;
 if ($::net) {
     if ($::net->getState() > 1) {
         $bus_message_received = $bus->onMessageReceived->add(undef, \&bus_message_received);
-        Plugins::delHook($networkHook);
-        undef $networkHook;
+        Plugins::delHooks($hooksNetwork);
     }
 }
 
@@ -112,9 +113,9 @@ sub on_ai {
         }
         # SP Controller
         if($char->{jobID} ne 4017) {
-            return if (!main::timeOut($time, 1)); # 1 seconds delay
-            my $ssp = int($char->{'sp'} / $char->{'sp_max'} * 100);
-            $bus->send('endlesstower', $char->{accountID}) if($ssp < 10);
+            return if (!main::timeOut($time, 5)); # 1 seconds delay
+            debugger($char->{nameID});
+            $bus->send('endlesstower', { ID => $char->{nameID} }) if($char->sp_percent() < 10);
         }
     }
     else {
@@ -125,23 +126,24 @@ sub on_ai {
 sub bus_message_received {
     my (undef, undef, $msg) = @_;
     if ($msg->{messageID} eq 'endlesstower' && $char) {
-        my $ssp = int($char->{'sp'} / $char->{'sp_max'} * 100);
-        my $giveSP = Actor::get($msg->{args});
-        if($giveSP
-           && $ssp > 99
-           && $char->{jobID} eq 4017
-           && distance(calcPosition($char), calcPosition($giveSP)) <= 5) {
-            my $skill = new Skill(auto => PF_SOULCHANGE, level => 1);
-            my $identify = $giveSP->{nameID} . $skill->{idn};
-            unless ($taskManager->countTasksByName($identify)) {
-                $taskManager->add(Task::UseSkill->new(
-                    name => $identify,
-                    skill => $skill,
-                    actor => $skill->getOwner,
-                    target => $giveSP,
-                    actorList => $playersList,
-                    priority => Task::HIGH_PRIORITY
-                ));
+        foreach (@playersID) {
+            my $player = $players{$_};
+            if($player->{nameID} eq $msg->{args}{ID}
+               && $char->sp_percent() > 99
+               && $char->{jobID} eq 4017
+               && distance(calcPosition($char), calcPosition($player)) <= 5) {
+                my $skill = new Skill(auto => PF_SOULCHANGE, level => 1);
+                my $identify = $player->{nameID} . $skill->{idn};
+                unless ($taskManager->countTasksByName($identify)) {
+                    $taskManager->add(Task::UseSkill->new(
+                        name => $identify,
+                        skill => $skill,
+                        actor => $skill->getOwner,
+                        target => $player,
+                        actorList => $playersList,
+                        priority => Task::HIGH_PRIORITY
+                    ));
+                }
             }
         }
     }
@@ -157,7 +159,7 @@ sub stateChanged {
     }
     if (!$bus_message_received) {
         $bus_message_received = $bus->onMessageReceived->add(undef, \&bus_message_received);
-        Plugins::delHook('Network::stateChanged', $hooks);
+        Plugins::delHooks($hooksNetwork);
     }
 }
 # debugger($monster->statusesString);
